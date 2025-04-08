@@ -1,0 +1,47 @@
+#!/bin/sh
+#
+# zfs-hybrid-unlock version 1.0
+# This script is meant to use a key unlocked from a LUKS volume to then
+# unlock zfs native encryption.  All it really does is copy the key from
+# the LUKS volume so it is there when the zpool is imported.  The nice
+# bit is that this happens in the initrd ramdrive, so it will get cleaned
+# up automatically when that initrd is delete during boot.
+#
+# You probably still want to do "cryptsetup close root-key" after boot.
+# A cron tab line starting with "@reboot" is enough.  
+# 
+# You can customize the root-key filename, the LUKS volume name.  Be sure
+# to set the root_key_file to match the "keylocation" property in your
+# zpool, and that the luks_key_volume matches the name in your crypttab file.
+# 
+# 
+
+root_key_file="/root-key"
+luks_key_volume="root-key"
+
+
+message()
+{
+        if plymouth --ping 2>/dev/null; then
+                plymouth message --text="$*"
+        else
+                echo "$*" >&2
+        fi
+        return 0
+}
+
+# make sure we run after the crypttab has been processed
+if [ "$1" = "prereqs" ]; then
+        echo cryptroot
+        exit 0
+fi
+
+
+if [ -e "/dev/mapper/$luks_key_volume" ] ; then
+    dd if="/dev/mapper/$luks_key_volume" bs=32 \
+       count=1 of="$root_key_file" 2> /dev/null
+else
+    message "Problem finding the zfs root key.  Did the LUKS unlock fail?"
+    exit 1
+fi
+
